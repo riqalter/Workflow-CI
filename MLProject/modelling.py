@@ -2,20 +2,21 @@
 modelling.py - ML Model Training with MLflow Logging for CI/CD
 
 Script ini didesain untuk berjalan di GitHub Actions CI environment.
-Menggunakan mlruns/ folder lokal untuk tracking (bukan server).
+Menggunakan DagsHub untuk remote tracking dan menyimpan artifacts lokal.
 
-Struktur Artefak yang Dihasilkan:
-├── model/
-│   ├── MLmodel
-│   ├── conda.yaml
-│   ├── model.pkl
-│   ├── python_env.yaml
-│   └── requirements.txt
-├── estimator.html
-├── metric_info.json
-├── training_confusion_matrix.png
-├── classification_report.json
-└── feature_importance.png
+Struktur Artefak yang Dihasilkan (lokal & DagsHub):
+├── artifacts/
+│   ├── model/
+│   │   ├── MLmodel
+│   │   ├── conda.yaml
+│   │   ├── model.pkl
+│   │   ├── python_env.yaml
+│   │   └── requirements.txt
+│   ├── estimator.html
+│   ├── metric_info.json
+│   ├── training_confusion_matrix.png
+│   ├── classification_report.json
+│   └── feature_importance.png
 
 Cara menjalankan:
     mlflow run . --env-manager=local
@@ -49,13 +50,17 @@ import mlflow.sklearn
 # KONFIGURASI MLFLOW - LOCAL TRACKING UNTUK CI
 # =============================================================================
 
-# Gunakan folder lokal untuk tracking (kompatibel dengan CI)
+# Gunakan DagsHub atau folder lokal untuk tracking
 MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "file:./mlruns")
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
 # Nama experiment sesuai ketentuan
 EXPERIMENT_NAME = "Latihan MSML"
 mlflow.set_experiment(EXPERIMENT_NAME)
+
+# Folder untuk menyimpan artifacts lokal (untuk GitHub Actions upload)
+ARTIFACTS_DIR = "artifacts"
+os.makedirs(ARTIFACTS_DIR, exist_ok=True)
 
 # =============================================================================
 # LOAD DATASET
@@ -202,21 +207,25 @@ with mlflow.start_run(run_name="RandomForest_Tuned") as run:
     mlflow.log_metric("best_cv_score", best_cv_score)
 
     # ---------------------------------
-    # LOG MODEL
+    # LOG MODEL - ke DagsHub dan simpan lokal
     # ---------------------------------
     print("    Logging model...")
     mlflow.sklearn.log_model(best_model, "model")
+    
+    # Simpan model lokal juga untuk upload ke GitHub Actions
+    local_model_path = os.path.join(ARTIFACTS_DIR, "model")
+    mlflow.sklearn.save_model(best_model, local_model_path)
+    print(f"    Model saved locally to: {local_model_path}")
 
     # ---------------------------------
     # ARTEFAK 1: estimator.html
     # ---------------------------------
     print("    Creating estimator.html...")
     estimator_html = estimator_html_repr(best_model)
-    html_path = "estimator.html"
+    html_path = os.path.join(ARTIFACTS_DIR, "estimator.html")
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(estimator_html)
     mlflow.log_artifact(html_path)
-    os.remove(html_path)
 
     # ---------------------------------
     # ARTEFAK 2: training_confusion_matrix.png
@@ -236,11 +245,10 @@ with mlflow.start_run(run_name="RandomForest_Tuned") as run:
     plt.xlabel("Predicted")
     plt.ylabel("Actual")
     plt.tight_layout()
-    cm_path = "training_confusion_matrix.png"
+    cm_path = os.path.join(ARTIFACTS_DIR, "training_confusion_matrix.png")
     plt.savefig(cm_path, dpi=150)
     plt.close()
     mlflow.log_artifact(cm_path)
-    os.remove(cm_path)
 
     # ---------------------------------
     # ARTEFAK 3: metric_info.json
@@ -267,11 +275,10 @@ with mlflow.start_run(run_name="RandomForest_Tuned") as run:
             "features": list(X.columns),
         },
     }
-    mi_path = "metric_info.json"
+    mi_path = os.path.join(ARTIFACTS_DIR, "metric_info.json")
     with open(mi_path, "w") as f:
         json.dump(metric_info, f, indent=2)
     mlflow.log_artifact(mi_path)
-    os.remove(mi_path)
 
     # ---------------------------------
     # ARTEFAK 4: classification_report.json
@@ -280,11 +287,10 @@ with mlflow.start_run(run_name="RandomForest_Tuned") as run:
     class_report = classification_report(
         y_test, y_pred, target_names=["Not Survived", "Survived"], output_dict=True
     )
-    cr_path = "classification_report.json"
+    cr_path = os.path.join(ARTIFACTS_DIR, "classification_report.json")
     with open(cr_path, "w") as f:
         json.dump(class_report, f, indent=2)
     mlflow.log_artifact(cr_path)
-    os.remove(cr_path)
 
     # ---------------------------------
     # ARTEFAK 5: feature_importance.png
@@ -304,11 +310,10 @@ with mlflow.start_run(run_name="RandomForest_Tuned") as run:
     plt.ylabel("Feature")
     plt.title("Feature Importance - Random Forest (Tuned)")
     plt.tight_layout()
-    fi_path = "feature_importance.png"
+    fi_path = os.path.join(ARTIFACTS_DIR, "feature_importance.png")
     plt.savefig(fi_path, dpi=150)
     plt.close()
     mlflow.log_artifact(fi_path)
-    os.remove(fi_path)
 
     # Get run info
     run_id = run.info.run_id

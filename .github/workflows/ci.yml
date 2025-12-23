@@ -3,9 +3,9 @@
 # =============================================================================
 #
 # Level Support:
-# - 🔹 BASIC:    Steps 1-6 (checkout, setup python, install deps, run mlflow)
-# - 🔹 SKILLED:  Steps 1-8 (+ upload artifacts to GitHub)
-# - 🔹 ADVANCED: Steps 1-13 (+ Docker build & push to Docker Hub)
+# - 🔹 BASIC:    Steps 1-7 (checkout, setup python, install deps, run mlflow)
+# - 🔹 SKILLED:  Steps 1-7 + DagsHub tracking (artifacts uploaded to DagsHub)
+# - 🔹 ADVANCED: Steps 1-12 (+ Docker build & push to Docker Hub)
 #
 # Trigger: push to main/master, pull_request, or manual dispatch
 # =============================================================================
@@ -92,45 +92,53 @@ jobs:
       # 🔹 BASIC - Step 7: Run MLflow Project
       # =========================================
       - name: Run MLflow Project
+        id: mlflow_run
         run: |
           echo "=== Starting MLflow Training ==="
-          mlflow run . --env-manager=local
+          mlflow run . --env-manager=local 2>&1 | tee mlflow_output.txt
           echo "=== Training Complete ==="
           echo "Artifacts uploaded to DagsHub: ${{ env.MLFLOW_TRACKING_URI }}"
 
+          # Extract run ID from output
+          RUN_ID=$(grep -oP "runs/\K[a-f0-9]+" mlflow_output.txt | head -1)
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          echo "Extracted Run ID: $RUN_ID"
+
       # =========================================
-      # 🔹 SKILLED - Step 8: Upload artifacts to GitHub
+      # 🔹 SKILLED - Step 8: Display DagsHub Links
+      # =========================================
+      - name: Display DagsHub Links
+        run: |
+          echo "=============================================="
+          echo "🎉 Training Complete! View results on DagsHub:"
+          echo "=============================================="
+          echo "📊 Experiment: ${{ env.MLFLOW_TRACKING_URI }}/#/experiments/0"
+          echo "🏃 Run: ${{ env.MLFLOW_TRACKING_URI }}/#/experiments/0/runs/${{ steps.mlflow_run.outputs.run_id }}"
+          echo "=============================================="
+          echo "📁 Local artifacts saved to: artifacts/"
+          ls -la artifacts/
+
+      # =========================================
+      # 🔹 SKILLED - Step 9: Upload artifacts to GitHub
       # =========================================
       - name: Upload MLflow artifacts
         uses: actions/upload-artifact@v4
         with:
           name: mlflow-artifacts
-          path: |
-            MLProject/mlruns/
+          path: MLProject/artifacts/
           retention-days: 30
 
       # =========================================
-      # 🔹 ADVANCED - Step 9: Get latest MLflow run ID
-      # =========================================
-      - name: Get latest MLflow run ID
-        id: get_run_id
-        run: |
-          # Find the latest run directory
-          LATEST_RUN=$(find mlruns -mindepth 2 -maxdepth 2 -type d | head -1)
-          RUN_ID=$(basename $LATEST_RUN)
-          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
-          echo "Latest MLflow Run ID: $RUN_ID"
-
-      # =========================================
-      # 🔹 ADVANCED - Step 10: Build Docker image
+      # 🔹 ADVANCED - Step 9: Build Docker image
       # =========================================
       - name: Build Docker image
+        if: secrets.DOCKERHUB_USERNAME != ''
         run: |
           # Install Docker dependencies for MLflow
           pip install mlflow[extras]
 
-          # Build Docker image from the model
-          MODEL_URI="mlruns/0/${{ steps.get_run_id.outputs.run_id }}/artifacts/model"
+          # Build Docker image from DagsHub model
+          MODEL_URI="runs:/${{ steps.mlflow_run.outputs.run_id }}/model"
           echo "Building Docker image from: $MODEL_URI"
 
           mlflow models build-docker \
@@ -140,18 +148,20 @@ jobs:
           docker images
 
       # =========================================
-      # 🔹 ADVANCED - Step 11: Login to Docker Hub
+      # 🔹 ADVANCED - Step 10: Login to Docker Hub
       # =========================================
       - name: Login to Docker Hub
+        if: secrets.DOCKERHUB_USERNAME != ''
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # =========================================
-      # 🔹 ADVANCED - Step 12: Tag Docker image
+      # 🔹 ADVANCED - Step 11: Tag Docker image
       # =========================================
       - name: Tag Docker image
+        if: secrets.DOCKERHUB_USERNAME != ''
         run: |
           docker tag titanic-classifier:latest ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:latest
           docker tag titanic-classifier:latest ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:${{ github.sha }}
@@ -159,9 +169,10 @@ jobs:
           docker images | grep titanic-classifier
 
       # =========================================
-      # 🔹 ADVANCED - Step 13: Push to Docker Hub
+      # 🔹 ADVANCED - Step 12: Push to Docker Hub
       # =========================================
       - name: Push Docker image to Docker Hub
+        if: secrets.DOCKERHUB_USERNAME != ''
         run: |
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:latest
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:${{ github.sha }}
