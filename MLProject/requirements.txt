@@ -1,0 +1,17 @@
+# Machine Learning Model Building with MLflow
+# Dependencies for Kriteria 2 Submission
+
+# Core ML
+scikit-learn>=1.3.0
+pandas>=2.0.0
+numpy>=1.24.0
+
+# MLflow Tracking
+mlflow>=2.10.0
+
+# DagsHub (Advanced - untuk remote tracking)
+dagshub>=0.3.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0

@@ -1,0 +1,167 @@
+# =============================================================================
+# GitHub Actions CI Workflow for MLflow Project
+# =============================================================================
+#
+# Level Support:
+# - 🔹 BASIC:    Steps 1-6 (checkout, setup python, install deps, run mlflow)
+# - 🔹 SKILLED:  Steps 1-8 (+ upload artifacts to GitHub)
+# - 🔹 ADVANCED: Steps 1-13 (+ Docker build & push to Docker Hub)
+#
+# Trigger: push to main/master, pull_request, or manual dispatch
+# =============================================================================
+
+name: MLflow CI Pipeline
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch: # Manual trigger
+
+env:
+  PYTHON_VERSION: "3.12.7"
+  MLFLOW_TRACKING_URI: "file:./mlruns"
+
+jobs:
+  train:
+    name: Train ML Model
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: MLProject
+
+    steps:
+      # =========================================
+      # 🔹 BASIC - Step 1: Checkout repository
+      # =========================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # =========================================
+      # 🔹 BASIC - Step 2: Setup Python
+      # =========================================
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # =========================================
+      # 🔹 BASIC - Step 3: Install uv
+      # =========================================
+      - name: Install uv
+        working-directory: .
+        run: |
+          pip install uv
+          echo "uv installed successfully"
+
+      # =========================================
+      # 🔹 BASIC - Step 4: Check environment
+      # =========================================
+      - name: Check environment
+        run: |
+          echo "=== Python Environment ==="
+          python --version
+          pip --version
+          uv --version
+          echo "=== Working Directory ==="
+          pwd
+          ls -la
+
+      # =========================================
+      # 🔹 BASIC - Step 5: Install dependencies
+      # =========================================
+      - name: Install dependencies
+        run: |
+          uv pip install --system .
+          echo "=== Installed Packages ==="
+          pip list
+
+      # =========================================
+      # 🔹 SKILLED - Step 6: Set MLflow Tracking URI
+      # =========================================
+      - name: Set MLflow Tracking URI
+        run: |
+          echo "MLFLOW_TRACKING_URI=${{ env.MLFLOW_TRACKING_URI }}" >> $GITHUB_ENV
+          mkdir -p mlruns
+          echo "MLflow tracking configured to: ${{ env.MLFLOW_TRACKING_URI }}"
+
+      # =========================================
+      # 🔹 BASIC - Step 7: Run MLflow Project
+      # =========================================
+      - name: Run MLflow Project
+        run: |
+          echo "=== Starting MLflow Training ==="
+          mlflow run . --env-manager=local
+          echo "=== Training Complete ==="
+          ls -la mlruns/
+
+      # =========================================
+      # 🔹 SKILLED - Step 8: Upload artifacts to GitHub
+      # =========================================
+      - name: Upload MLflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlflow-artifacts
+          path: |
+            MLProject/mlruns/
+          retention-days: 30
+
+      # =========================================
+      # 🔹 ADVANCED - Step 9: Get latest MLflow run ID
+      # =========================================
+      - name: Get latest MLflow run ID
+        id: get_run_id
+        run: |
+          # Find the latest run directory
+          LATEST_RUN=$(find mlruns -mindepth 2 -maxdepth 2 -type d | head -1)
+          RUN_ID=$(basename $LATEST_RUN)
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          echo "Latest MLflow Run ID: $RUN_ID"
+
+      # =========================================
+      # 🔹 ADVANCED - Step 10: Build Docker image
+      # =========================================
+      - name: Build Docker image
+        run: |
+          # Install Docker dependencies for MLflow
+          pip install mlflow[extras]
+
+          # Build Docker image from the model
+          MODEL_URI="mlruns/0/${{ steps.get_run_id.outputs.run_id }}/artifacts/model"
+          echo "Building Docker image from: $MODEL_URI"
+
+          mlflow models build-docker \
+            --model-uri "$MODEL_URI" \
+            --name "titanic-classifier"
+
+          docker images
+
+      # =========================================
+      # 🔹 ADVANCED - Step 11: Login to Docker Hub
+      # =========================================
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # =========================================
+      # 🔹 ADVANCED - Step 12: Tag Docker image
+      # =========================================
+      - name: Tag Docker image
+        run: |
+          docker tag titanic-classifier:latest ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:latest
+          docker tag titanic-classifier:latest ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:${{ github.sha }}
+          echo "Docker images tagged:"
+          docker images | grep titanic-classifier
+
+      # =========================================
+      # 🔹 ADVANCED - Step 13: Push to Docker Hub
+      # =========================================
+      - name: Push Docker image to Docker Hub
+        run: |
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:${{ github.sha }}
+          echo "Docker images pushed successfully!"
