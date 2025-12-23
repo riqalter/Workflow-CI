@@ -21,7 +21,7 @@ on:
 
 env:
   PYTHON_VERSION: "3.12.7"
-  MLFLOW_TRACKING_URI: "file:./mlruns"
+  MLFLOW_TRACKING_URI: "https://dagshub.com/riqalter/msml-mikailthoriq.mlflow"
 
 jobs:
   train:
@@ -74,18 +74,19 @@ jobs:
       # =========================================
       - name: Install dependencies
         run: |
-          uv pip install --system .
+          uv pip install --system -r requirements.txt
           echo "=== Installed Packages ==="
           pip list
 
       # =========================================
-      # 🔹 SKILLED - Step 6: Set MLflow Tracking URI
+      # 🔹 SKILLED - Step 6: Set MLflow Tracking URI (DagsHub)
       # =========================================
       - name: Set MLflow Tracking URI
         run: |
           echo "MLFLOW_TRACKING_URI=${{ env.MLFLOW_TRACKING_URI }}" >> $GITHUB_ENV
-          mkdir -p mlruns
-          echo "MLflow tracking configured to: ${{ env.MLFLOW_TRACKING_URI }}"
+          echo "MLFLOW_TRACKING_USERNAME=${{ secrets.MLFLOW_TRACKING_USERNAME }}" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.MLFLOW_TRACKING_PASSWORD }}" >> $GITHUB_ENV
+          echo "MLflow tracking configured to DagsHub: ${{ env.MLFLOW_TRACKING_URI }}"
 
       # =========================================
       # 🔹 BASIC - Step 7: Run MLflow Project
