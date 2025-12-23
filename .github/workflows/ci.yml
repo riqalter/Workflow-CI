@@ -135,8 +135,12 @@ jobs:
       - name: Build Docker image
         run: |
           pip install mlflow[extras]
-          MODEL_URI="runs:/${{ steps.mlflow_run.outputs.run_id }}/model"
-          echo "Building Docker image from: $MODEL_URI"
+
+          # Use local model path (saved during training)
+          MODEL_URI="artifacts/model"
+          echo "Building Docker image from local model: $MODEL_URI"
+          ls -la $MODEL_URI
+
           mlflow models build-docker --model-uri "$MODEL_URI" --name "titanic-classifier"
           docker images
 
