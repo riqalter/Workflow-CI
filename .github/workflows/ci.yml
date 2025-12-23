@@ -96,7 +96,7 @@ jobs:
           echo "=== Starting MLflow Training ==="
           mlflow run . --env-manager=local
           echo "=== Training Complete ==="
-          ls -la mlruns/
+          echo "Artifacts uploaded to DagsHub: ${{ env.MLFLOW_TRACKING_URI }}"
 
       # =========================================
       # 🔹 SKILLED - Step 8: Upload artifacts to GitHub
