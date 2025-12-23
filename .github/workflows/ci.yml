@@ -129,51 +129,30 @@ jobs:
           retention-days: 30
 
       # =========================================
-      # 🔹 ADVANCED - Step 9: Build Docker image
+      # 🔹 ADVANCED - Docker Steps (Uncomment when Docker Hub secrets are configured)
       # =========================================
-      - name: Build Docker image
-        if: secrets.DOCKERHUB_USERNAME != ''
-        run: |
-          # Install Docker dependencies for MLflow
-          pip install mlflow[extras]
+      # To enable Docker build and push:
+      # 1. Add DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets in GitHub repo settings
+      # 2. Uncomment the steps below
 
-          # Build Docker image from DagsHub model
-          MODEL_URI="runs:/${{ steps.mlflow_run.outputs.run_id }}/model"
-          echo "Building Docker image from: $MODEL_URI"
+      # - name: Build Docker image
+      #   run: |
+      #     pip install mlflow[extras]
+      #     MODEL_URI="runs:/${{ steps.mlflow_run.outputs.run_id }}/model"
+      #     echo "Building Docker image from: $MODEL_URI"
+      #     mlflow models build-docker --model-uri "$MODEL_URI" --name "titanic-classifier"
+      #     docker images
 
-          mlflow models build-docker \
-            --model-uri "$MODEL_URI" \
-            --name "titanic-classifier"
+      # - name: Login to Docker Hub
+      #   uses: docker/login-action@v3
+      #   with:
+      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
+      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-          docker images
-
-      # =========================================
-      # 🔹 ADVANCED - Step 10: Login to Docker Hub
-      # =========================================
-      - name: Login to Docker Hub
-        if: secrets.DOCKERHUB_USERNAME != ''
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      # =========================================
-      # 🔹 ADVANCED - Step 11: Tag Docker image
-      # =========================================
-      - name: Tag Docker image
-        if: secrets.DOCKERHUB_USERNAME != ''
-        run: |
-          docker tag titanic-classifier:latest ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:latest
-          docker tag titanic-classifier:latest ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:${{ github.sha }}
-          echo "Docker images tagged:"
-          docker images | grep titanic-classifier
-
-      # =========================================
-      # 🔹 ADVANCED - Step 12: Push to Docker Hub
-      # =========================================
-      - name: Push Docker image to Docker Hub
-        if: secrets.DOCKERHUB_USERNAME != ''
-        run: |
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:latest
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:${{ github.sha }}
-          echo "Docker images pushed successfully!"
+      # - name: Tag and Push Docker image
+      #   run: |
+      #     docker tag titanic-classifier:latest ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:latest
+      #     docker tag titanic-classifier:latest ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:${{ github.sha }}
+      #     docker push ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:latest
+      #     docker push ${{ secrets.DOCKERHUB_USERNAME }}/titanic-classifier:${{ github.sha }}
+      #     echo "Docker images pushed successfully!"
